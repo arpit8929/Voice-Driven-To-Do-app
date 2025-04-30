@@ -1,70 +1,67 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:uuid/uuid.dart';
 import '../models/todo.dart';
 import '../services/database_service.dart';
 import '../services/voice_service.dart';
 
-final databaseServiceProvider = Provider<DatabaseService>((ref) {
-  return DatabaseService();
-});
-
-final voiceServiceProvider = Provider<VoiceService>((ref) {
-  return VoiceService();
-});
+final databaseServiceProvider = Provider((ref) => DatabaseService());
+final voiceServiceProvider = Provider((ref) => VoiceService());
 
 final todosProvider = StateNotifierProvider<TodosNotifier, List<Todo>>((ref) {
-  return TodosNotifier(ref.watch(databaseServiceProvider));
+  final databaseService = ref.watch(databaseServiceProvider);
+  return TodosNotifier(databaseService);
 });
 
 class TodosNotifier extends StateNotifier<List<Todo>> {
   final DatabaseService _databaseService;
+  final _uuid = const Uuid();
 
   TodosNotifier(this._databaseService) : super([]) {
-    loadTodos();
+    _loadTodos();
   }
 
-  Future<void> loadTodos() async {
+  Future<void> _loadTodos() async {
     state = _databaseService.getLocalTodos();
   }
 
   Future<void> addTodo(String title) async {
     final todo = Todo(
-      id: DateTime.now().millisecondsSinceEpoch.toString(),
+      id: _uuid.v4(),
       title: title,
-      createdAt: DateTime.now(),
     );
-    
-    await _databaseService.addTodoLocally(todo);
+
     state = [...state, todo];
-    await _databaseService.syncWithCloud();
+    await _databaseService.addTodoLocally(todo);
+    await _databaseService.addTodoToCloud(todo);
   }
 
   Future<void> toggleTodo(String id) async {
-    final index = state.indexWhere((todo) => todo.id == id);
-    if (index != -1) {
-      final todo = state[index];
-      final updatedTodo = todo.copyWith(
-        isCompleted: !todo.isCompleted,
-        completedAt: !todo.isCompleted ? DateTime.now() : null,
-      );
-      
-      await _databaseService.updateTodoLocally(updatedTodo);
-      state = [
-        ...state.sublist(0, index),
-        updatedTodo,
-        ...state.sublist(index + 1),
-      ];
-      await _databaseService.syncWithCloud();
-    }
+    state = [
+      for (final todo in state)
+        if (todo.id == id)
+          todo.copyWith(
+            isCompleted: !todo.isCompleted,
+            completedAt: !todo.isCompleted ? DateTime.now() : null,
+          )
+        else
+          todo,
+    ];
+
+    await _databaseService.toggleTodoLocally(id);
+    await _databaseService.toggleTodoInCloud(id);
   }
 
   Future<void> deleteTodo(String id) async {
-    await _databaseService.deleteTodoLocally(id);
     state = state.where((todo) => todo.id != id).toList();
-    await _databaseService.syncWithCloud();
+    await _databaseService.deleteTodoLocally(id);
+    await _databaseService.deleteTodoFromCloud(id);
   }
 
   Future<void> syncTodos() async {
-    await _databaseService.fetchFromCloud();
-    state = _databaseService.getLocalTodos();
+    final cloudTodos = await _databaseService.getCloudTodos();
+    state = cloudTodos;
+    for (final todo in cloudTodos) {
+      await _databaseService.addTodoLocally(todo);
+    }
   }
 } 

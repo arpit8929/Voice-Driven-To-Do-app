@@ -12,58 +12,25 @@ class HomeScreen extends ConsumerStatefulWidget {
 }
 
 class _HomeScreenState extends ConsumerState<HomeScreen> {
+  final TextEditingController _controller = TextEditingController();
   late final VoiceService _voiceService;
-  bool _isInitialized = false;
 
   @override
   void initState() {
     super.initState();
-    _initializeVoiceService();
-  }
-
-  Future<void> _initializeVoiceService() async {
     _voiceService = ref.read(voiceServiceProvider);
-    final isAvailable = await _voiceService.initialize();
-    setState(() {
-      _isInitialized = isAvailable;
-    });
   }
 
-  Future<void> _startListening() async {
-    if (!_isInitialized) return;
-
-    await _voiceService.startListening((result) {
-      _processVoiceCommand(result);
-    });
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
   }
 
-  void _processVoiceCommand(String command) {
-    final todosNotifier = ref.read(todosProvider.notifier);
-    
-    if (command.toLowerCase().contains('add')) {
-      final title = command.replaceAll('add', '').trim();
-      if (title.isNotEmpty) {
-        todosNotifier.addTodo(title);
-        _voiceService.speak('Added task: $title');
-      }
-    } else if (command.toLowerCase().contains('complete')) {
-      final title = command.replaceAll('complete', '').trim();
-      final todos = ref.read(todosProvider);
-      final todo = todos.firstWhere(
-        (t) => t.title.toLowerCase().contains(title.toLowerCase()),
-        orElse: () => todos.first,
-      );
-      todosNotifier.toggleTodo(todo.id);
-      _voiceService.speak('Marked task as completed');
-    } else if (command.toLowerCase().contains('delete')) {
-      final title = command.replaceAll('delete', '').trim();
-      final todos = ref.read(todosProvider);
-      final todo = todos.firstWhere(
-        (t) => t.title.toLowerCase().contains(title.toLowerCase()),
-        orElse: () => todos.first,
-      );
-      todosNotifier.deleteTodo(todo.id);
-      _voiceService.speak('Deleted task');
+  void _addTodo() {
+    if (_controller.text.isNotEmpty) {
+      ref.read(todosProvider.notifier).addTodo(_controller.text);
+      _controller.clear();
     }
   }
 
@@ -121,11 +88,40 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             ),
           ),
           Padding(
-            padding: const EdgeInsets.all(16.0),
-            child: FloatingActionButton.extended(
-              onPressed: _isInitialized ? _startListening : null,
-              icon: const Icon(Icons.mic),
-              label: Text(_isInitialized ? 'Start Voice Command' : 'Initializing...'),
+            padding: const EdgeInsets.all(8.0),
+            child: Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: _controller,
+                    decoration: const InputDecoration(
+                      hintText: 'Add a new todo...',
+                      border: OutlineInputBorder(),
+                    ),
+                    onSubmitted: (_) => _addTodo(),
+                  ),
+                ),
+                IconButton(
+                  icon: Icon(
+                    _voiceService.isListening ? Icons.mic_off : Icons.mic,
+                    color: _voiceService.isListening ? Colors.red : null,
+                  ),
+                  onPressed: () {
+                    if (_voiceService.isListening) {
+                      _voiceService.stopListening();
+                    } else {
+                      _voiceService.startListening((text) {
+                        _controller.text = text;
+                        _addTodo();
+                      });
+                    }
+                  },
+                ),
+                IconButton(
+                  icon: const Icon(Icons.add),
+                  onPressed: _addTodo,
+                ),
+              ],
             ),
           ),
         ],

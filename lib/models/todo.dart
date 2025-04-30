@@ -1,35 +1,19 @@
-import 'package:hive/hive.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
-part 'todo.g.dart';
-
-@HiveType(typeId: 0)
 class Todo {
-  @HiveField(0)
   final String id;
-
-  @HiveField(1)
   final String title;
-
-  @HiveField(2)
   final bool isCompleted;
-
-  @HiveField(3)
   final DateTime createdAt;
-
-  @HiveField(4)
   final DateTime? completedAt;
-
-  @HiveField(5)
-  final bool isSynced;
 
   Todo({
     required this.id,
     required this.title,
     this.isCompleted = false,
-    required this.createdAt,
+    DateTime? createdAt,
     this.completedAt,
-    this.isSynced = false,
-  });
+  }) : createdAt = createdAt ?? DateTime.now();
 
   Todo copyWith({
     String? id,
@@ -37,7 +21,6 @@ class Todo {
     bool? isCompleted,
     DateTime? createdAt,
     DateTime? completedAt,
-    bool? isSynced,
   }) {
     return Todo(
       id: id ?? this.id,
@@ -45,7 +28,31 @@ class Todo {
       isCompleted: isCompleted ?? this.isCompleted,
       createdAt: createdAt ?? this.createdAt,
       completedAt: completedAt ?? this.completedAt,
-      isSynced: isSynced ?? this.isSynced,
+    );
+  }
+
+  Map<String, dynamic> toMap() {
+    return {
+      'id': id,
+      'title': title,
+      'isCompleted': isCompleted,
+      'createdAt': Timestamp.fromDate(createdAt),
+      'completedAt': completedAt != null ? Timestamp.fromDate(completedAt!) : null,
+    };
+  }
+
+  factory Todo.fromMap(Map<String, dynamic> map) {
+    final createdAt = map['createdAt'];
+    final completedAt = map['completedAt'];
+    
+    return Todo(
+      id: map['id'] as String,
+      title: map['title'] as String,
+      isCompleted: map['isCompleted'] as bool,
+      createdAt: createdAt is Timestamp ? createdAt.toDate() : DateTime.parse(createdAt.toString()),
+      completedAt: completedAt != null 
+          ? (completedAt is Timestamp ? completedAt.toDate() : DateTime.parse(completedAt.toString()))
+          : null,
     );
   }
 } 
